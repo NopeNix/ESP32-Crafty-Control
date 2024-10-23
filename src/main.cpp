@@ -8,22 +8,21 @@
 // UUIDs from the craftyUuids.ts file
 std::map<std::string, std::string> uuidMap = {
     {"ServiceUuid", "00000001-4c45-4b43-4942-265a524f5453"},
+    {"MetaDataUuid", "00000002-4c45-4b43-4942-265a524f5453"},
+    {"MiscDataUuid", "00000003-4c45-4b43-4942-265a524f5453"},
     {"TemperatureUuid", "00000011-4c45-4b43-4942-265a524f5453"},
     {"SetPointUuid", "00000021-4c45-4b43-4942-265a524f5453"},
     {"BoostUuid", "00000031-4c45-4b43-4942-265a524f5453"},
     {"BatteryUuid", "00000041-4c45-4b43-4942-265a524f5453"},
     {"LedUuid", "00000051-4c45-4b43-4942-265a524f5453"},
-    {"MetaDataUuid", "00000002-4c45-4b43-4942-265a524f5453"},
     {"ModelUuid", "00000022-4c45-4b43-4942-265a524f5453"},
     {"VersionUuid", "00000032-4c45-4b43-4942-265a524f5453"},
     {"SerialUuid", "00000052-4c45-4b43-4942-265a524f5453"},
-    {"MiscDataUuid", "00000003-4c45-4b43-4942-265a524f5453"},
     {"HoursOfOperationUuid", "00000023-4c45-4b43-4942-265a524f5453"},
     {"SettingsUuid", "000001c3-4c45-4b43-4942-265a524f5453"},
     {"PowerUuid", "00000063-4c45-4b43-4942-265a524f5453"},
     {"ChargingUuid", "000000a3-4c45-4b43-4942-265a524f5453"},
     {"PowerBoostHeatStateUuid", "00000093-4c45-4b43-4942-265a524f5453"},
-    // Additional UUIDs from craftyUuids.ts
     {"BatteryRemainingUuid", "00000153-4c45-4b43-4942-265a524f5453"},
     {"BatteryCapacityUuid", "00000143-4c45-4b43-4942-265a524f5453"},
     {"BatteryDesignCapacityUuid", "00000183-4c45-4b43-4942-265a524f5453"},
@@ -55,7 +54,6 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
         Serial.print("Device found: ");
         Serial.println(advertisedDevice.toString().c_str());
 
-        // Check if the device name matches "Storz&Bickel" or "STORZ&BICKEL"
         if (advertisedDevice.haveName()) {
             std::string deviceName = advertisedDevice.getName();
             if (deviceName == "Storz&Bickel" || deviceName == "STORZ&BICKEL") {
@@ -70,7 +68,9 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 
 void setup() {
     Serial.begin(115200);
-    delay(2000); // Delay to allow serial monitor connection
+    pinMode(LED_BUILTIN, OUTPUT); // Assuming LED_BUILTIN is the pin for the LED
+    digitalWrite(LED_BUILTIN, LOW); // Turn off LED initially
+    delay(2000); // Delay for serial monitor connection
     Serial.println("Starting Arduino BLE Client application...");
     BLEDevice::init("");
 
@@ -91,13 +91,17 @@ bool connectToServer() {
     }
     Serial.println("Connected to server");
 
+    // Turn on LED to indicate successful connection
+    digitalWrite(LED_BUILTIN, HIGH);
+
+    // Attempt to retrieve the primary service
     BLERemoteService* pRemoteService = pClient->getService(BLEUUID(uuidMap["ServiceUuid"]));
     if (pRemoteService == nullptr) {
-        Serial.println("Failed to find our service UUID");
+        Serial.println("Failed to find the main service UUID");
         pClient->disconnect();
         return false;
     }
-    Serial.println("Found our service");
+    Serial.println("Found main service");
 
     // Iterate over all UUIDs and attempt to read
     for (const auto& pair : uuidMap) {
@@ -118,7 +122,17 @@ bool connectToServer() {
                 Serial.print("Value for ");
                 Serial.print(pair.first.c_str());
                 Serial.print(": ");
-                Serial.println(value.c_str());
+                if (pair.first.find("Temperature") != std::string::npos || pair.first.find("Voltage") != std::string::npos) {
+                    // Assuming temperature and voltage are stored as 16-bit integers
+                    int16_t intValue = *(int16_t*)value.data();
+                    Serial.println(intValue);
+                } else if (pair.first.find("Serial") != std::string::npos || pair.first.find("Model") != std::string::npos) {
+                    // Assuming serial and model are stored as strings
+                    Serial.println(value.c_str());
+                } else {
+                    // Default to printing the raw value as a string
+                    Serial.println(value.c_str());
+                }
             }
         } catch (const std::exception& e) {
             Serial.print("Exception for UUID ");
